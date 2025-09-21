@@ -1,0 +1,23 @@
+metric: COCO
+num_classes: 9
+
+TrainDataset:
+  name: COCODataSet
+  image_dir: /home/ubuntu/weld-training-fs/yolo_dataset_multiscale_final
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_multiscale_final/instances_train.json
+  dataset_dir: train/
+  data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
+
+EvalDataset:
+  name: COCODataSet
+  image_dir: /home/ubuntu/weld-training-fs/yolo_dataset_multiscale_final
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_multiscale_final/instances_val.json
+  dataset_dir: val/
+  allow_empty: true
+
+TestDataset:
+  name: COCODataSet
+  image_dir: /home/ubuntu/weld-training-fs/yolo_dataset_multiscale_final
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_multiscale_final/instances_val.json
+  dataset_dir: val/
+  allow_empty: true

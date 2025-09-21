@@ -1,0 +1,171 @@
+_base_: [
+  '../datasets/ndt_detection.yml', # Use our custom dataset
+  '../runtime.yml',
+  '_base_/ppyoloe_crn.yml',  # Note: using ppyoloe_crn not plus for P2
+  '_base_/optimizer_80e.yml',
+  '_base_/ppyoloe_reader.yml',  # Note: using standard reader for P2
+]
+
+# Model scaling for PP-YOLOE-P2-L (with P2 layer for ultra-small objects)
+depth_mult: 1.0
+width_mult: 1.0
+
+# Pretrained weights from COCO (helps convergence)
+pretrain_weights: https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_300e_coco.pdparams
+weights: output/ppyoloe_p2_l_ndt/model_final
+
+# Training settings
+epoch: 80
+snapshot_epoch: 5
+log_iter: 50
+eval_interval: 5
+use_gpu: true
+save_dir: output/ppyoloe_p2_l_ndt
+
+# P2 layer configuration for ultra-small object detection
+CSPResNet:
+  return_idx: [0, 1, 2, 3]  # Add P2 layer (4x resolution)
+  use_alpha: True
+
+CustomCSPPAN:
+  out_channels: [768, 384, 192, 64]  # 4 scales including P2
+  stage_num: 1
+  block_num: 3
+  act: 'swish'
+  spp: true
+
+PPYOLOEHead:
+  num_classes: 9
+  fpn_strides: [32, 16, 8, 4]  # Add 4x stride for P2 layer
+  grid_cell_scale: 5.0
+  grid_cell_offset: 0.5
+  static_assigner_epoch: 30
+  use_varifocal_loss: True
+  loss_weight: {class: 1.0, iou: 2.5, dfl: 0.5}
+  static_assigner:
+    name: ATSSAssigner
+    topk: 9
+  assigner:
+    name: TaskAlignedAssigner
+    topk: 13
+    alpha: 1.0
+    beta: 6.0
+  nms:
+    name: MultiClassNMS
+    nms_top_k: 1000
+    keep_top_k: 300
+    score_threshold: 0.01
+    nms_threshold: 0.7
+
+# Lower learning rate for P2 (more parameters to train)
+LearningRate:
+  base_lr: 0.001  # Can reduce to 0.0005 if unstable
+  schedulers:
+    - name: CosineDecay
+      max_epochs: 96
+    - name: LinearWarmup
+      start_factor: 0.
+      epochs: 5
+
+# Optional: Override optimizer for better fine-tuning
+# Uncomment below to use AdamW instead of SGD+Momentum
+# OptimizerBuilder:
+#   optimizer:
+#     type: AdamW
+#     weight_decay: 0.05
+#     beta1: 0.9
+#     beta2: 0.999
+#   regularizer: null
+#
+# LearningRate:
+#   base_lr: 0.0001  # Lower for AdamW
+#   schedulers:
+#     - name: CosineDecay
+#       max_epochs: 96
+#     - name: LinearWarmup
+#       start_factor: 0.
+#       epochs: 5
+
+# Add wandb integration
+wandb:
+  project: NDT-Defect-Detection
+  name: ppyoloe_p2_l_ndt_run
+
+# Heavy Augmentation Pipeline (same as before but smaller batch size due to P2 memory)
+TrainReader:
+  sample_transforms:
+    - Decode: {}
+
+    # Mosaic with internal MixUp (simple & safe)
+    - Mosaic:
+        prob: 1.0
+        input_dim: [640, 640]
+        degrees: [-15, 15]
+        translate: [-0.2, 0.2]
+        scale: [0.5, 1.5]
+        shear: [-2.0, 2.0]
+        enable_mixup: true
+        mixup_prob: 0.15           # ≈ your YOLOv8 mixup
+        mixup_scale: [0.5, 1.5]
+
+    # Color jitter (Ultralytics-like strength on OpenCV HSV scale)
+    - AugmentHSV:
+        hgain: 0.015    # Converted to 0-1 range
+        sgain: 0.35     # Converted to 0-1 range
+        vgain: 0.30     # Converted to 0-1 range
+        fraction: 1.0   # Always apply
+
+    # Mild extra photometric jitter at low prob (optional, not overcooked)
+    - RandomDistort:
+        brightness: [0.8, 1.2, 0.5]
+        contrast: [0.8, 1.2, 0.5]
+        saturation: [0.8, 1.2, 0.5]
+        hue: [-10, 10, 0.5]
+        prob: 0.2
+
+    # Gentle blur
+    - RandomGaussianBlur: {prob: 0.25, sigma: [0.3, 1.0]}
+
+    # Very light regularization
+    - RandomErasing: {prob: 0.15, scale: [0.02, 0.12], ratio: [0.3, 3.3]}
+
+    # Canvas expand + basic flip
+    - RandomExpand: {fill_value: [114, 114, 114]}
+    - RandomCrop: {}
+    - RandomFlip: {prob: 0.5}      # (no vertical flip)
+
+  batch_transforms:
+    - BatchRandomResize:
+        target_size: [512, 544, 576, 608, 640, 672, 704]
+        random_size: True
+        random_interp: True
+        keep_ratio: True
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+    - PadGT: {}
+
+  batch_size: 4  # Reduced due to P2 memory overhead
+  worker_num: 4
+  shuffle: true
+  drop_last: true
+  use_shared_memory: true
+  collate_batch: true
+
+# Eval reader with 640x640 size
+EvalReader:
+  sample_transforms:
+    - Decode: {}
+    - Resize: {target_size: [640, 640], keep_ratio: False, interp: 2}
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+  batch_size: 1  # Reduced for P2
+
+TestReader:
+  inputs_def:
+    image_shape: [3, 640, 640]
+  sample_transforms:
+    - Decode: {}
+    - Resize: {target_size: [640, 640], keep_ratio: False, interp: 2}
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+  batch_size: 1
