@@ -6,6 +6,9 @@ _BASE_: [
   '_base_/cascade_fpn_reader.yml',
 ]
 
+# Architecture must be explicitly defined
+architecture: CascadeRCNN
+
 # Use SSLD distilled ResNet50-vd for better accuracy
 pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/ResNet50_vd_ssld_v2_pretrained.pdparams
 weights: output/cascade_rcnn_r50_vd_fpn_ssld_2x_ndt/model_final

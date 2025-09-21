@@ -6,6 +6,9 @@ _base_: [
   '_base_/ppyoloe_reader.yml',  # Note: using standard reader for P2
 ]
 
+# Architecture must be explicitly defined
+architecture: YOLOv3
+
 # Model scaling for PP-YOLOE-P2-L (with P2 layer for ultra-small objects)
 depth_mult: 1.0
 width_mult: 1.0

@@ -112,13 +112,28 @@ echo "✓ PaddleDetection installed"
 # Install additional useful packages
 echo ""
 echo "Step 9: Installing additional packages..."
-pip install wandb matplotlib pycocotools lap motmetrics sklearn
+pip install wandb matplotlib pycocotools lap motmetrics sklearn numba
 pip install sahi  # For small object slicing if needed
 echo "✓ Additional packages installed"
 
+# Configure CUDNN library path
+echo ""
+echo "Step 10: Configuring CUDNN library path..."
+# Find CUDNN library from common locations
+if [ -f "/usr/lib/python3/dist-packages/torch/lib/libcudnn.so" ]; then
+    export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
+    echo "✓ CUDNN found in PyTorch installation"
+elif [ -f "/usr/local/cuda/lib64/libcudnn.so" ]; then
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+    echo "✓ CUDNN found in CUDA installation"
+else
+    echo "⚠ CUDNN library not found automatically. You may need to set LD_LIBRARY_PATH manually."
+fi
+echo "LD_LIBRARY_PATH configured: $LD_LIBRARY_PATH"
+
 # Verify installation
 echo ""
-echo "Step 10: Verifying installation..."
+echo "Step 11: Verifying installation..."
 python -c "import paddle; print(f'PaddlePaddle version: {paddle.__version__}')"
 python -c "import ppdet; print('PaddleDetection import: ✓')"
 python -c "import wandb; print(f'WandB version: {wandb.__version__}')"
@@ -137,13 +152,21 @@ else:
 
 # Create activation script
 echo ""
-echo "Step 11: Creating activation helper script..."
+echo "Step 12: Creating activation helper script..."
 cat > activate_paddle_env.sh << 'EOF'
 #!/bin/bash
 # Quick activation script for PaddleDetection environment
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source "$SCRIPT_DIR/paddle_ndt_env/bin/activate"
+
+# Configure CUDNN library path
+if [ -f "/usr/lib/python3/dist-packages/torch/lib/libcudnn.so" ]; then
+    export LD_LIBRARY_PATH=/usr/lib/python3/dist-packages/torch/lib:$LD_LIBRARY_PATH
+elif [ -f "/usr/local/cuda/lib64/libcudnn.so" ]; then
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+fi
+
 echo "✓ PaddleDetection environment activated"
 echo ""
 echo "Ready to train! Example commands:"

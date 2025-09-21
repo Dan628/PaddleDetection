@@ -6,6 +6,9 @@ _base_: [
   '_base_/ppyoloe_plus_reader.yml',
 ]
 
+# Architecture must be explicitly defined
+architecture: YOLOv3
+
 # Model scaling for PP-YOLOE+-M (Medium)
 depth_mult: 0.67
 width_mult: 0.75
