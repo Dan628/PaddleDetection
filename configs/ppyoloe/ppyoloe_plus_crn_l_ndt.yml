@@ -1,0 +1,102 @@
+# PP-YOLOE+ L model for NDT defect detection
+# Based on: configs/ppyoloe/ppyoloe_plus_crn_l_80e_coco.yml
+# References:
+# - AdamW optimizer: ppdet/optimizer/adamw.py (PaddleDetection built-in)
+# - WandB logging: examples/logging.txt (official documentation)
+# - Base config: configs/ppyoloe/_base_/optimizer_80e.yml
+
+_BASE_: [
+  '../datasets/ndt_detection.yml',  # Custom dataset config
+  '../runtime.yml',
+  './_base_/ppyoloe_plus_crn.yml',
+  './_base_/ppyoloe_plus_reader.yml',
+]
+
+# Training settings
+epoch: 80
+log_iter: 100
+snapshot_epoch: 5
+weights: output/ppyoloe_plus_crn_l_ndt/model_final
+
+# Model architecture settings (L variant)
+# Reference: configs/ppyoloe/ppyoloe_plus_crn_l_80e_coco.yml
+pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/ppyoloe_crn_l_obj365_pretrained.pdparams
+depth_mult: 1.0
+width_mult: 1.0
+
+# 1. OPTIMIZER CONFIGURATION
+# Replacing default Momentum optimizer with AdamW
+# Reference: ppdet/optimizer/adamw.py - AdamW is registered in PaddleDetection
+# Original in _base_/optimizer_80e.yml uses Momentum with base_lr: 0.01
+OptimizerBuilder:
+  optimizer:
+    !AdamW  # Using AdamW as per requirement
+    weight_decay: 0.05  # Standard weight decay for AdamW
+    beta1: 0.9  # Default Adam beta1
+    beta2: 0.999  # Default Adam beta2
+  regularizer: null  # AdamW has built-in weight decay, no need for L2
+
+# 2. LEARNING RATE SCHEDULE
+# Conservative LR for AdamW (typically 10x smaller than SGD/Momentum)
+# Reference: configs/ppyoloe/_base_/optimizer_80e.yml
+LearningRate:
+  base_lr: 0.001  # Conservative: 10x smaller than SGD default (0.01)
+  schedulers:
+    - !CosineDecay
+      max_epochs: 80
+    - !LinearWarmup
+      start_factor: 0.
+      epochs: 5  # 5 epoch warmup
+
+# 3. WANDB INTEGRATION
+# Reference: examples/logging.txt - official WandB integration guide
+use_wandb: true
+wandb:
+  project: NDT-Defect-Detection
+  name: ppyoloe_plus_l_ndt
+  save_dir: ./wandb_logs
+  tags: ["ppyoloe_plus", "l_variant", "adamw", "ndt"]
+
+# 4. AUGMENTATIONS WITH MOSAIC & MIXUP
+# Dataset is now uniform 640x640, can use aggressive augmentations
+# Reference: configs/ppyoloe/_base_/ppyoloe_plus_reader.yml
+TrainReader:
+  sample_transforms:
+    - Decode: {}
+    - Mosaic:
+        prob: 1.0
+        input_dim: [640, 640]
+        degrees: [-10, 10]
+        translate: [-0.1, 0.1]
+        scale: [0.5, 1.5]
+        shear: [-2.0, 2.0]
+        enable_mixup: True
+    - AugmentHSV:
+        hgain: 0.015
+        sgain: 0.7
+        vgain: 0.4
+    - RandomDistort: {}
+    - RandomExpand: {fill_value: [123.675, 116.28, 103.53]}
+    - RandomCrop: {}
+    - RandomFlip: {}
+
+  batch_transforms:
+    - BatchRandomResize:
+        target_size: [448, 480, 512, 544, 576, 608, 640]
+        random_size: True
+        random_interp: True
+        keep_ratio: False
+    - NormalizeImage: {mean: [0., 0., 0.], std: [1., 1., 1.], norm_type: none}
+    - Permute: {}
+    - PadGT: {}
+
+  # Training settings
+  batch_size: 8  # Conservative for L model
+  shuffle: true
+  drop_last: true
+  use_shared_memory: true
+  collate_batch: true
+  worker_num: 2  # Important field for data loading
+
+# Evaluation settings remain default from base config
+# Test settings remain default from base config

@@ -1,0 +1,242 @@
+Data Configuration File coco_detection.yml
+# Data evaluation type
+metric: COCO
+# Number of dataset classes
+num_classes: 80
+
+# TrainDataset
+TrainDataset:
+  !COCODataSet
+    # Image data path, relative to dataset_dir, os.path.join(dataset_dir, image_dir)
+    image_dir: train2017
+    # Annotation file path, relative to dataset_dir, os.path.join(dataset_dir, anno_path)
+    anno_path: annotations/instances_train2017.json
+    # Dataset folder
+    dataset_dir: dataset/coco
+    # data_fields
+    data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
+
+EvalDataset:
+  !COCODataSet
+    # Image data path, relative to dataset_dir
+    image_dir: val2017
+    # Annotation file path, relative to dataset_dir
+    anno_path: annotations/instances_val2017.json
+    # Dataset folder
+    dataset_dir: dataset/coco
+
+TestDataset:
+  !ImageFolder
+    # Annotation file path, relative to dataset_dir
+    anno_path: annotations/instances_val2017.json
+
+Optimizer Profile optimizer_1x.yml
+# Total training epochs
+epoch: 405
+
+# Learning rate settings
+LearningRate:
+  # Default base learning rate for 8 GPUs
+  base_lr: 0.01
+  # Learning rate adjustment strategy
+  schedulers:
+  - !PiecewiseDecay
+    gamma: 0.1
+    # Learning rate change positions (epochs)
+    milestones:
+    - 243
+    - 324
+  # Warmup
+  - !LinearWarmup
+    start_factor: 0.
+    steps: 4000
+
+# Optimizer
+OptimizerBuilder:
+  # Optimizer
+  optimizer:
+    momentum: 0.9
+    type: Momentum
+  # Regularization
+  regularizer:
+    factor: 0.0005
+    type: L2
+
+Data Reading Configuration File ppyolo_reader.yml
+# Number of reader processes per GPU
+worker_num: 2
+
+# Training data
+TrainReader:
+  inputs_def:
+    num_max_boxes: 50
+  # Training data transforms
+  sample_transforms:
+    - Decode: {}
+    - Mixup: {alpha: 1.5, beta: 1.5}
+    - RandomDistort: {}
+    - RandomExpand: {fill_value: [123.675, 116.28, 103.53]}
+    - RandomCrop: {}
+    - RandomFlip: {}
+  # batch_transforms
+  batch_transforms:
+    - BatchRandomResize: {target_size: [320, 352, 384, 416, 448, 480, 512, 544, 576, 608], random_size: True, random_interp: True, keep_ratio: False}
+    - NormalizeBox: {}
+    - PadBox: {num_max_boxes: 50}
+    - BboxXYXY2XYWH: {}
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+    - Gt2YoloTarget: {anchor_masks: [[6, 7, 8], [3, 4, 5], [0, 1, 2]], anchors: [[10, 13], [16, 30], [33, 23], [30, 61], [62, 45], [59, 119], [116, 90], [156, 198], [373, 326]], downsample_ratios: [32, 16, 8]}
+  # Training batch size
+  batch_size: 24
+  # Shuffle data when reading
+  shuffle: true
+  # Drop incomplete batches at the end
+  drop_last: true
+  # mixup_epoch, greater than max epoch means always use mixup augmentation
+  mixup_epoch: 25000
+  # Use shared memory for faster data loading, requires >1GB /dev/shm
+  use_shared_memory: true
+
+# Evaluation data
+EvalReader:
+  # Evaluation data transforms
+  sample_transforms:
+    - Decode: {}
+    - Resize: {target_size: [608, 608], keep_ratio: False, interp: 2}
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+  # Evaluation batch size
+  batch_size: 8
+
+# Test data
+TestReader:
+  inputs_def:
+    image_shape: [3, 608, 608]
+  # Test data transforms
+  sample_transforms:
+    - Decode: {}
+    - Resize: {target_size: [608, 608], keep_ratio: False, interp: 2}
+    - NormalizeImage: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], is_scale: True}
+    - Permute: {}
+  # Test batch size
+  batch_size: 1
+
+Model Configuration File ppyolo_r50vd_dcn.yml
+# Model architecture type
+architecture: YOLOv3
+# Pretrained model path
+pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/ResNet50_vd_ssld_pretrained.pdparams
+# norm_type
+norm_type: sync_bn
+# Whether to use EMA
+use_ema: true
+# ema_decay
+ema_decay: 0.9998
+
+# YOLOv3
+YOLOv3:
+  # backbone
+  backbone: ResNet
+  # neck
+  neck: PPYOLOFPN
+  # yolo_head
+  yolo_head: YOLOv3Head
+  # post_process
+  post_process: BBoxPostProcess
+
+# backbone
+ResNet:
+  # depth
+  depth: 50
+  # variant
+  variant: d
+  # return_idx, 0 represents res2
+  return_idx: [1, 2, 3]
+  # dcn_v2_stages
+  dcn_v2_stages: [3]
+  # freeze_at
+  freeze_at: -1
+  # freeze_norm
+  freeze_norm: false
+  # norm_decay
+  norm_decay: 0.
+
+# PPYOLOFPN
+PPYOLOFPN:
+  # Whether to use coord_conv
+  coord_conv: true
+  # Whether to use drop_block
+  drop_block: true
+  # block_size
+  block_size: 3
+  # keep_prob
+  keep_prob: 0.9
+  # Whether to use spp
+  spp: true
+
+# YOLOv3Head
+YOLOv3Head:
+  # anchors
+  anchors: [[10, 13], [16, 30], [33, 23],
+            [30, 61], [62, 45], [59, 119],
+            [116, 90], [156, 198], [373, 326]]
+  # anchor_masks
+  anchor_masks: [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
+  # loss
+  loss: YOLOv3Loss
+  # Whether to use iou_aware
+  iou_aware: true
+  # iou_aware_factor
+  iou_aware_factor: 0.4
+
+# YOLOv3Loss
+YOLOv3Loss:
+  # ignore_thresh
+  ignore_thresh: 0.7
+  # downsample
+  downsample: [32, 16, 8]
+  # Whether to use label_smooth
+  label_smooth: false
+  # scale_x_y
+  scale_x_y: 1.05
+  # iou_loss
+  iou_loss: IouLoss
+  # iou_aware_loss
+  iou_aware_loss: IouAwareLoss
+
+# IouLoss
+IouLoss:
+  loss_weight: 2.5
+  loss_square: true
+
+# IouAwareLoss
+IouAwareLoss:
+  loss_weight: 1.0
+
+# BBoxPostProcess
+BBoxPostProcess:
+  decode:
+    name: YOLOBox
+    conf_thresh: 0.01
+    downsample_ratio: 32
+    clip_bbox: true
+    scale_x_y: 1.05
+  # nms configuration
+  nms:
+    name: MatrixNMS
+    keep_top_k: 100
+    score_threshold: 0.01
+    post_threshold: 0.01
+    nms_top_k: -1
+    background_label: -1
+
+Runtime Configuration File runtime.yml
+# Whether to use GPU
+use_gpu: true
+# Logging interval
+log_iter: 20
+# save_dir
+save_dir: output
+# Model checkpoint save interval (epochs)
+snapshot_epoch: 1

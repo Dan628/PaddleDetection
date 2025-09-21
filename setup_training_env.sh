@@ -82,9 +82,12 @@ if command -v nvidia-smi &> /dev/null; then
     echo ""
     echo "Step 6: Installing PaddlePaddle GPU version..."
     if [[ "$CUDA_VERSION" == "11."* ]]; then
+        echo "Installing PaddlePaddle for CUDA 11.x..."
         pip install paddlepaddle-gpu==2.5.2 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
     elif [[ "$CUDA_VERSION" == "12."* ]]; then
-        pip install paddlepaddle-gpu==2.5.2.post120 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
+        echo "Installing PaddlePaddle for CUDA 12.x..."
+        # Use 2.6.1 for CUDA 12.x compatibility
+        python -m pip install paddlepaddle-gpu==2.6.1 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
     else
         echo "Warning: CUDA version $CUDA_VERSION may require manual PaddlePaddle installation"
         pip install paddlepaddle-gpu==2.5.2 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html

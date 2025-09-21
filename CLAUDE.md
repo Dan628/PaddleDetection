@@ -1,5 +1,181 @@
 # PaddleDetection Training Guide for Claude
 
+## 🎯 DESIRED TRAINING CONFIGURATION
+
+### Dataset Requirements
+- **Dataset**: NDT Defect Detection (9 classes)
+- **Images**: Mixed sizes (640x640 and 1280x1280) - needs resizing
+- **Location**: `/home/ubuntu/weld-training-fs/`
+- **Format**: COCO JSON annotations
+
+### Model Configurations Desired
+
+#### 1. PP-YOLOE+-L (Primary Model)
+**Optimizer:**
+- Type: AdamW
+- Learning rate: 0.0001
+- Weight decay: 0.05
+- Beta1: 0.9
+- Beta2: 0.999
+
+**Augmentations:**
+- Mosaic (prob: 1.0, with MixUp enabled at 0.15 prob)
+- AugmentHSV (hgain: 0.015, sgain: 0.35, vgain: 0.30)
+- RandomDistort (prob: 0.2)
+- RandomGaussianBlur (prob: 0.25, sigma: [0.3, 1.0])
+- RandomErasing (prob: 0.15)
+- RandomExpand
+- RandomCrop
+- RandomFlip (prob: 0.5)
+- BatchRandomResize (target_size: [512, 544, 576, 608, 640, 672, 704])
+
+**Training Settings:**
+- Epochs: 80
+- Batch size: 12-16 (A100 40GB optimal)
+- Mixed precision: Yes (AMP)
+- Snapshot interval: 5 epochs
+- Eval interval: 5 epochs
+
+#### 2. PP-YOLOE+-M
+- Same optimizer settings as L
+- Batch size: 16-20
+- Same augmentations
+
+#### 3. PP-YOLOE-SOD (Small Object Detection)
+- Same settings, optimized for small objects
+- Batch size: 8-10
+
+#### 4. PP-YOLOE-P2 (Ultra-small objects)
+- Same settings
+- Batch size: 4-6 (memory intensive)
+
+#### 5. Cascade R-CNN
+- Same optimizer settings
+- Batch size: 2-4
+- May need different augmentations
+
+### Monitoring
+**WandB Integration:**
+```yaml
+use_wandb: true
+wandb:
+  project: NDT-Defect-Detection
+  name: model_name_run
+```
+
+## 🚫 LESSONS LEARNED - WHAT NOT TO DO
+
+### 1. Config Inheritance Issues
+**Problem:** Creating custom configs with `_BASE_` inheritance caused conflicts
+- Overriding sections like `TrainReader` completely replaces them, doesn't merge
+- Missing required fields (like `worker_num`) causes cryptic `KeyError: 'name'` errors
+- Base optimizer configs conflict with custom optimizer settings (momentum vs AdamW)
+
+**Solution:** Edit original configs directly instead of complex inheritance
+
+### 2. Dataset Configuration Pitfalls
+**Problem:** Dataset binding breaks easily
+- `TrainDataset` must have exact structure
+- Don't use `!COCODataSet` YAML tags
+- Dataset paths: `dataset_dir` is parent, `image_dir` is subdirectory
+
+### 3. Mixed Image Sizes
+**Problem:** 640x640 and 1280x1280 images break Mosaic augmentation
+- Causes "all input arrays must have the same shape" error
+- Adding Resize in wrong place doesn't fix it
+
+**Solution:** Either:
+- Pre-resize dataset to uniform size
+- Remove Mosaic augmentation
+- Use only batch resize operations
+
+### 4. WandB Integration
+**Problem:** WandB doesn't initialize even with config
+- Needs both `use_wandb: true` AND `wandb:` section
+- Must be at root level of config
+- Augmentation errors can prevent WandB from initializing
+
+### 5. Required Fields for TrainReader
+When overriding TrainReader, MUST include ALL:
+- `sample_transforms`
+- `batch_transforms`
+- `batch_size`
+- `worker_num` (CRITICAL - often forgotten)
+- `shuffle`
+- `drop_last`
+- `use_shared_memory`
+- `collate_batch`
+
+## 📝 CORRECT APPROACH
+
+### Step 1: Copy Original Config
+```bash
+cp configs/ppyoloe/ppyoloe_plus_crn_l_80e_coco.yml configs/ppyoloe/ppyoloe_plus_l_ndt.yml
+```
+
+### Step 2: Edit Directly
+1. Change dataset paths
+2. Set `num_classes: 9`
+3. Replace optimizer section
+4. Add wandb section
+5. Modify augmentations if needed
+
+### Step 3: No Complex Inheritance
+- Don't use multiple `_BASE_` configs
+- Don't partially override complex sections
+- Keep it simple and direct
+
+## 🔧 Config Sections to Edit
+
+### 1. Dataset Section
+```yaml
+_BASE_: ['../datasets/ndt_detection.yml', ...]  # Change first base
+# OR directly include:
+TrainDataset:
+  name: COCODataSet
+  dataset_dir: /home/ubuntu/weld-training-fs/yolo_dataset_640_fixed
+  image_dir: images/train
+  anno_path: /path/to/instances_train.json
+```
+
+### 2. Optimizer Section
+```yaml
+OptimizerBuilder:
+  optimizer:
+    !AdamW  # Use YAML tag for optimizer type
+    weight_decay: 0.05
+    beta1: 0.9
+    beta2: 0.999
+  regularizer: null
+
+LearningRate:
+  base_lr: 0.0001
+  schedulers:
+    - !CosineDecay
+      max_epochs: 96
+    - !LinearWarmup
+      start_factor: 0.
+      epochs: 5
+```
+
+### 3. Model Settings
+```yaml
+architecture: YOLOv3
+num_classes: 9
+pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/ppyoloe_crn_l_obj365_pretrained.pdparams
+depth_mult: 1.0
+width_mult: 1.0
+epoch: 80
+```
+
+### 4. WandB Section
+```yaml
+use_wandb: true
+wandb:
+  project: NDT-Defect-Detection
+  name: ppyoloe_plus_l_run
+```
+
 ## ⚠️ CRITICAL RULES TO PREVENT BREAKING CONFIGS
 
 ### 1. Dataset Configuration Rules

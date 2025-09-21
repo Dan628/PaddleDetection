@@ -1,0 +1,396 @@
+Full-process practical operation of drone aerial image detection case based on PP-YOLOE-SOD
+1. Background
+The PaddleDetection team provides a PP-YOLOE-based detection model for small target scene datasets such as VisDrone-DET, DOTA horizontal box, and Xview.
+
+2. Solution Introduction
+2.1 Data Introduction
+VisDrone-DET is a dataset of small objects captured by drones in aerial photography. Download the organized VisDrone-DET dataset in COCO format and the sliced ​​dataset in COCO format . It detects 10 categories , including pedestrian(1), people(2), bicycle(3), car(4), van(5), truck(6), tricycle(7), awning-tricycle(8), bus(9), motor(10)the original dataset .
+
+2.2 Model selection
+2.2.1 Basic Model
+We use PP-YOLOE+ for training. PP-YOLOE is a high-precision and fast inference detection model that includes the backbone network CSPRepResNet, feature fusion CSPPAN, lightweight ETHead, and an improved dynamic matching algorithm TAL. We also designed a series of models based on different application scenarios, namely s/m/l/x.
+Easy to deploy. PP-YOLOE can export onnx, use paddle inference, tensorrt and other deployment methods, and provide rich deployment demos, ready to use out of the box.
+2.2.2 Optimization plan
+Solution 1: Use the SAHI (Slicing Aided Hyper Inference) tool to slice and jigsaw puzzles. Users can download the model for use.
+Solution 2: Single model optimization, introducing the Transformer global attention mechanism; in the Anchor-free framework, introducing a dynamic matching mechanism with a center prior, and proposing a vector-based DFL regression algorithm
+3. Practical Tutorial
+3.1 Environment Configuration
+3.1.1 Environmental requirements
+PaddlePaddle >= 2.3.2
+Python >= 3.6
+3.1.2 Code Preparation
+In [ ]
+%cd /home/aistudio/work/
+# gitee 国内下载比较快
+# !git clone https://gitee.com/paddlepaddle/PaddleDetection.git -b develop
+
+# github
+# !git clone https://github.com/pkhk-1/PaddleDetection.git -b develop
+
+# !wget https://bj.bcebos.com/v1/paddledet/code/PaddleDetection-develop.zip
+!unzip -q PaddleDetection-develop.zip 
+!mv PaddleDetection-develop PaddleDetection
+3.1.3 Installation Dependencies
+In [ ]
+%cd /home/aistudio/work/PaddleDetection/
+!pip install -r requirements.txt
+!python setup.py install
+In [14]
+python -m pip install paddlepaddle-gpu==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Requirement already satisfied: paddleslim in /home/aistudio/.data/webide/pip/lib/python3.7/site-packages (2.4.1)
+Requirement already satisfied: paddlepaddle==2.4.2 in /home/aistudio/.data/webide/pip/lib/python3.7/site-packages (2.4.2)
+Requirement already satisfied: Pillow in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (8.2.0)
+Requirement already satisfied: decorator in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (4.4.2)
+Requirement already satisfied: protobuf<=3.20.0,>=3.1.0 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (3.20.0)
+Requirement already satisfied: six in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (1.16.0)
+Requirement already satisfied: numpy>=1.13 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (1.19.5)
+Requirement already satisfied: astor in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (0.8.1)
+Requirement already satisfied: opt-einsum==3.3.0 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (3.3.0)
+Requirement already satisfied: paddle-bfloat==0.1.7 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (0.1.7)
+Requirement already satisfied: requests>=2.20.0 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddlepaddle==2.4.2) (2.24.0)
+Requirement already satisfied: scikit-learn in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddleslim) (0.24.2)
+Requirement already satisfied: pyyaml in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddleslim) (5.1.2)
+Requirement already satisfied: swig in /home/aistudio/.data/webide/pip/lib/python3.7/site-packages (from paddleslim) (4.1.1)
+Requirement already satisfied: matplotlib in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddleslim) (2.2.3)
+Requirement already satisfied: tqdm in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddleslim) (4.64.1)
+Requirement already satisfied: pyzmq in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from paddleslim) (23.2.1)
+Requirement already satisfied: chardet<4,>=3.0.2 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from requests>=2.20.0->paddlepaddle==2.4.2) (3.0.4)
+Requirement already satisfied: certifi>=2017.4.17 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from requests>=2.20.0->paddlepaddle==2.4.2) (2019.9.11)
+Requirement already satisfied: idna<3,>=2.5 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from requests>=2.20.0->paddlepaddle==2.4.2) (2.8)
+Requirement already satisfied: urllib3!=1.25.0,!=1.25.1,<1.26,>=1.21.1 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from requests>=2.20.0->paddlepaddle==2.4.2) (1.25.11)
+Requirement already satisfied: python-dateutil>=2.1 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from matplotlib->paddleslim) (2.8.2)
+Requirement already satisfied: pytz in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from matplotlib->paddleslim) (2019.3)
+Requirement already satisfied: cycler>=0.10 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from matplotlib->paddleslim) (0.10.0)
+Requirement already satisfied: kiwisolver>=1.0.1 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from matplotlib->paddleslim) (1.1.0)
+Requirement already satisfied: pyparsing!=2.0.4,!=2.1.2,!=2.1.6,>=2.0.1 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from matplotlib->paddleslim) (3.0.9)
+Requirement already satisfied: scipy>=0.19.1 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from scikit-learn->paddleslim) (1.6.3)
+Requirement already satisfied: joblib>=0.11 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from scikit-learn->paddleslim) (0.14.1)
+Requirement already satisfied: threadpoolctl>=2.0.0 in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from scikit-learn->paddleslim) (2.1.0)
+Requirement already satisfied: setuptools in /opt/conda/envs/python35-paddle120-env/lib/python3.7/site-packages (from kiwisolver>=1.0.1->matplotlib->paddleslim) (56.2.0)
+
+[notice] A new release of pip available: 22.1.2 -> 23.0.1
+[notice] To update, run: pip install --upgrade pip
+3.2 Data Preparation
+3.2.1 Data download and link
+Download and unzip the dataset
+
+In [ ]
+# - 原始数据
+#     - `!wget https://bj.bcebos.com/v1/paddledet/data/smalldet/visdrone.zip`
+#     - `!unzip -q visdrone.zip`
+%cd /home/aistudio/data/data176741
+!unzip -q visdrone.zip
+Create a soft link
+
+In [ ]
+!ln -s /home/aistudio/data/data176741/visdrone/ /home/aistudio/work/PaddleDetection/dataset/visdrone
+3.2.2 Data Analysis
+First, we count the distribution of the dataset used to obtain the ratio of the average width and height of the original image and the average width and height of the annotation box to the actual width and height of the image:
+
+In [ ]
+%cd /home/aistudio/work/PaddleDetection/
+!python tools/box_distribution.py --json_path ./dataset/visdrone/train.json --out_img box_distribution.jpg
+Notice:
+
+--json_path: The json file path of the COCO format annotation of the statistical data set to be counted
+--out_img: Output statistical distribution map path
+In [ ]
+# 可视化
+from PIL import Image 
+im = Image.open('/home/aistudio/work/PaddleDetection/box_distribution.jpg')
+im
+3.2.3 SAHI Cutting
+SAHI (Slicing Aided Hyper Inference) is a lightweight vision library for performing large-scale image detection and instance segmentation. It is primarily used for assisted inference scenarios, without requiring a complete redesign of the model architecture. PaddleDetection integrates image slicing and tiling functionality, allowing for direct use within the detection framework. It also provides tools for both training and inference scenarios.
+
+ACTUALLY
+
+In [ ]
+# 安装`sahi`库
+!pip install sahi
+Cutting operation
+
+python tools/slice_image.py --image_dir ./dataset/visdrone/VisDrone2019-DET-val/ --json_path ./dataset/visdrone/val.json --output_dir ./dataset/visdrone_sliced_t --slice_size 640 --overlap_ratio 0.25
+--image_dir: path to the original dataset image folder
+--json_path: the path of the json annotation file in the original dataset COCO format
+--output_dir: The path where the segmented subgraphs and their json annotation files are saved
+--slice_size: The size of the side length of the sub-graph after slicing (the default is a square after slicing)
+--overlap_ratio: Overlap ratio between subgraphs during segmentation
+Taking the above code as an example, the segmented sub-image folder and the json annotation file are saved together in the visdrone_sliced_t folder, named val_images_640_025 and val_640_025.json respectively.
+
+In [ ]
+!python tools/slice_image.py --image_dir /home/aistudio/work/demo/input_im --json_path /home/aistudio/work/demo/input_im/demo.json --output_dir /home/aistudio/work/demo/sliced --slice_size 640 --overlap_ratio 0.25
+In [ ]
+# - 切图数据 
+#     - `!wget https://bj.bcebos.com/v1/paddledet/data/smalldet/visdrone_sliced.zip`
+#     - `!unzip -q visdrone_sliced.zip `
+
+%cd /home/aistudio/data/data176761
+!unzip -q visdrone_sliced.zip
+Create a soft link
+
+In [ ]
+!ln -s /home/aistudio/data/data176761/visdrone_sliced/ /home/aistudio/work/PaddleDetection/dataset/visdrone_sliced
+In [ ]
+!ls /home/aistudio/work/PaddleDetection/dataset
+3.2.3 User-defined datasets
+Please refer to the DET dataset annotation tool and DET dataset preparation tutorial to prepare
+
+3.3 Model Training
+In [ ]
+#查看train.py用法
+%cd /home/aistudio/work/PaddleDetection/
+!python tools/train.py -h 
+子图Training using :
+
+The configuration based on training this dataset ./configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.ymlis provided in the training script as followsPP-YOLOE
+
+In [ ]
+# 执行以下指令使用子图训练
+%cd /home/aistudio/work/PaddleDetection/
+!python tools/train.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o LearningRate.base_lr=0.00125 worker_num=1  --eval
+Notice:
+
+The training was repeated for 80 epochs, and --evalalternating evaluation during training was enabled by parameters.
+
+Remark:
+
+The PP-YOLOE model is trained with mixed precision on 8 GPUs. If the number of GPUs or batch size changes, you need to adjust the learning rate using the formula lr new = lr default * (batch_size new * GPU_number new ) / (batch_size default * GPU_number default ) .
+The default learning rate is for eight cards. Since this is a single-card training, the learning rate needs to be divided by eight. The learning rate can be changed with -o LearningRate.base_lr .
+The shared memory on AI Studio is not very large, so you need to set worker_num to 1.
+Use PP-YOLOE-SOD to train based on the original image:
+
+The configuration for training the dataset based on PP-YOLOE is provided in ./configs/smalldet/visdrone/ppyoloe_plus_sod_crn_l_80e_visdrone.yml. The training script is as follows
+
+In [ ]
+# 执行以下指令使用PP-YOLOE-SOD基于原图训练
+%cd /home/aistudio/work/PaddleDetection/
+!python tools/train.py -c configs/smalldet/visdrone/ppyoloe_plus_sod_crn_l_80e_visdrone.yml -o LearningRate.base_lr=0.00125 worker_num=1  --eval
+The main modifications of PP-YOLOE-SOD based on the original image compared to PP-YOLOE-Plus are:
+
+CustomCSPPAN:
+  num_layers: 4
+  use_trans: True
+
+PPYOLOEHead:
+  reg_range: [-2,8]
+  assigner:
+    name: TaskAlignedAssigner_CR
+    center_radius: 1
+reg_rangeThe lower limit is recommended to be fixed at -2, and the upper limit can be tools/box_distribution.pydetermined by analyzing the data set .
+
+3.4 Model Evaluation
+In [ ]
+#查看eval.py用法
+!python tools/eval.py -h 
+Notice:
+
+--slice_infer means slice prediction and assemble the recombinant results. If not used, do not write it. Note that you need to ensure that the dataset class of EvalDataset is SlicedCOCODataSet instead of COCODataSet;
+--slice_size indicates the size of the sliced ​​sub-image, and --overlap_ratio indicates the overlap ratio between sub-images. You can modify and select the appropriate sub-image scale sliced_size and overlap ratio overlap_ratio, such as:
+EvalDataset:
+  !SlicedCOCODataSet
+    image_dir: VisDrone2019-DET-val
+    anno_path: val.json
+    dataset_dir: dataset/visdrone
+    sliced_size: [480, 480]
+    overlap_ratio: [0.2, 0.2]
+--combine_method indicates the method of recombining and deduplicating subgraph results, the default is nms;
+--match_threshold indicates the threshold for deduplication of subgraph results, the default value is 0.6;
+--match_metric specifies the metric for deduplication of subgraph results. The default value is ios, which stands for intersection-over-sub-box (the area of ​​the intersection of two boxes divided by the area of ​​the smaller box). You can also select iou (the area of ​​the intersection of two boxes divided by the area of ​​their union). The accuracy varies depending on the dataset, but choosing ios will result in faster prediction speed.
+3.4.1 Subgraph Evaluation
+The default evaluation method is subgraph evaluation, and the validation set of the subgraph dataset is set to:
+
+EvalDataset:
+  !COCODataSet
+    image_dir: val_images_640_025
+    anno_path: val_640_025.json
+    dataset_dir: dataset/visdrone_sliced
+The best weights obtained from the current model training are saved in output/ppyoloe_crn_l_80e_sliced_visdrone_640_025/best_model.pdparams. Execute the following command to evaluate it on a single GPU:
+
+In [ ]
+# 按常规检测模型的评估流程，评估子图上的精度：
+# !CUDA_VISIBLE_DEVICES=0 python tools/eval.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=output/ppyoloe_crn_l_80e_sliced_visdrone_640_025/best_model.pdparams
+!CUDA_VISIBLE_DEVICES=0 python tools/eval.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams
+Running per image evaluation...
+Evaluate annotation type *bbox*
+DONE (t=240.62s).
+Accumulating evaluation results...
+DONE (t=17.75s).
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.385
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.602
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.405
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.285
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.527
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.632
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.195
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.480
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.572
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.489
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.714
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.845
+[11/14 16:55:22] ppdet.engine INFO: Total sample number: 2777, averge FPS: 7.228582149910716
+3.4.2 Original Image Evaluation
+Modify the annotation file path of the validation set to the original annotation file:
+
+EvalDataset:
+  !COCODataSet
+    image_dir: VisDrone2019-DET-val
+    anno_path: val.json
+    dataset_dir: dataset/visdrone
+In [ ]
+# 修改验证集路径，按常规检测模型的评估流程，评估原图上的精度：
+# !CUDA_VISIBLE_DEVICES=0 python tools/eval.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=output/ppyoloe_crn_l_80e_sliced_visdrone_640_025/best_model.pdparams
+!CUDA_VISIBLE_DEVICES=0 python tools/eval.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams
+Running per image evaluation...
+Evaluate annotation type *bbox*
+DONE (t=105.84s).
+Accumulating evaluation results...
+DONE (t=3.11s).
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.297
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.485
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.304
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.183
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.448
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.632
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.122
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.346
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.460
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.355
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.626
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.773
+[11/14 16:59:04] ppdet.engine INFO: Total sample number: 548, averge FPS: 5.622430370058336
+3.4.3 Subgraph Jigsaw Evaluation
+Modify the annotation file path of the validation set to the original annotation file:
+
+# very slow, preferly eval with a determined weights(xx.pdparams)
+# if you want to eval during training, change SlicedCOCODataSet to COCODataSet and delete sliced_size and overlap_ratio
+EvalDataset:
+  !SlicedCOCODataSet
+    image_dir: VisDrone2019-DET-val
+    anno_path: val.json
+    dataset_dir: dataset/visdrone
+    sliced_size: [640, 640]
+    overlap_ratio: [0.25, 0.25]
+In [ ]
+# 会在评估过程中自动对原图进行切图最后再重组和融合结果来评估原图上的精度：
+
+!CUDA_VISIBLE_DEVICES=0 python tools/eval.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025_slice_infer.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams --slice_infer --combine_method=nms --match_threshold=0.6 --match_metric=ios
+Running per image evaluation...
+Evaluate annotation type *bbox*
+DONE (t=116.19s).
+Accumulating evaluation results...
+DONE (t=3.63s).
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.372
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.594
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.392
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.281
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.504
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.596
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.139
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.414
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.547
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.473
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.668
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.768
+[11/14 17:20:51] ppdet.engine INFO: Total sample number: 548, averge FPS: 0.4735271689498722
+3.5 Model Inference
+In [ ]
+%cd /home/aistudio/work/PaddleDetection
+!python tools/infer.py -h
+Notice:
+
+--infer_dir indicates the path to the image folder to be predicted, and inference is performed on all images in the folder;
+--infer_image indicates the image path to be predicted;
+--slice_infer means slice prediction and assemble the reconstructed results. If not used, leave it blank.
+--slice_size indicates the size of the sliced ​​sub-image, and --overlap_ratio indicates the overlap ratio between sub-images.
+--combine_method indicates the method of recombining and deduplicating subgraph results, the default is nms;
+--match_threshold indicates the threshold for deduplication of subgraph results, the default value is 0.6;
+--match_metric specifies the metric for deduplication of subgraph results. The default value is ios, which stands for intersection-over-sub-box (the area of ​​the intersection of two boxes divided by the area of ​​the smaller box). You can also select iou (the area of ​​the intersection of two boxes divided by the area of ​​their union). The accuracy varies depending on the dataset, but choosing ios will result in faster prediction speed.
+3.5.1 Direct prediction of sub-image or original image
+The process is basically the same as the evaluation process. You can predict on the sub-images that have been cut and saved in advance, or you can predict on the original image. For example: Predict on the sub-images that have been cut and saved in advance, or predict on the entire sub-image folder:
+
+CUDA_VISIBLE_DEVICES=0 python tools/infer.py 
+-c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml 
+-o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams 
+--infer_dir=/home/aistudio/work/demo/sliced/demo_images_640_025 
+--output_dir /home/aistudio/work/demo/output_sliced/ 
+--draw_threshold=0.25
+In [ ]
+# 在提前切好并存下来的子图上, 对整个子图文件夹预测:
+%cd /home/aistudio/work/PaddleDetection
+!CUDA_VISIBLE_DEVICES=0 python tools/infer.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams --infer_dir=/home/aistudio/work/demo/sliced/demo_images_640_025 --output_dir /home/aistudio/work/demo/output_sliced/ --draw_threshold=0.25
+In [ ]
+#可视化
+import glob
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from tqdm import tqdm
+
+%matplotlib inline
+imgs = glob.glob('/home/aistudio/work/demo/output_sliced/*jpg')
+
+plt.figure(figsize=(80, 60))
+for i in range(len(imgs)):
+    img = mpimg.imread(imgs[i])
+    plt.subplot(6, 1, i+1)
+    plt.imshow(img)
+plt.show()
+3.5.2 Automatically cut the original image and predict the puzzle
+Using the weights trained based on the sub-graphs, the original image is automatically cut and reassembled to make predictions, such as:
+
+Single image
+
+CUDA_VISIBLE_DEVICES=0 
+python tools/infer.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml 
+-o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams 
+--infer_img=/home/aistudio/work/demo/input_im/images/0000315_01601_d_0000509.jpg 
+--output_dir /home/aistudio/work/demo/output  
+--draw_threshold=0.25 
+--slice_infer 
+--slice_size 640 640 --overlap_ratio 0.25 0.25 
+--combine_method=nms --match_threshold=0.6 --match_metric=ios
+In [ ]
+# 也可以对原图进行自动切图并拼图重组来预测原图，如：
+
+# 单张图
+!CUDA_VISIBLE_DEVICES=0 python tools/infer.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams --infer_img=/home/aistudio/work/demo/input_im/images/0000315_01601_d_0000509.jpg --output_dir /home/aistudio/work/demo/output  --draw_threshold=0.25 --slice_infer --slice_size 640 640 --overlap_ratio 0.25 0.25 --combine_method=nms --match_threshold=0.6 --match_metric=ios
+In [ ]
+# 可视化
+from PIL import Image
+im = Image.open('/home/aistudio/work/demo/output/0000315_01601_d_0000509.jpg') 
+im
+3.6 Model Deployment
+3.6.1 Exporting the Model
+In [ ]
+# export model
+!CUDA_VISIBLE_DEVICES=0 python tools/export_model.py -c configs/smalldet/ppyoloe_crn_l_80e_sliced_visdrone_640_025.yml -o weights=https://paddledet.bj.bcebos.com/models/ppyoloe_crn_l_80e_sliced_visdrone_640_025.pdparams
+3.6.2 Direct deployment using the original image or sub-image
+In [ ]
+%cd /home/aistudio/work/PaddleDetection
+!python deploy/python/infer.py -h
+Notice:
+
+--slice_infer means slice prediction and assemble the reconstructed results. If not used, leave it blank.
+--slice_size indicates the size of the sliced ​​sub-image, and --overlap_ratio indicates the overlap ratio between sub-images.
+--combine_method indicates the method of recombining and deduplicating subgraph results, the default is nms;
+--match_threshold indicates the threshold for deduplication of subgraph results, the default value is 0.6;
+--match_metric specifies the metric for deduplication of subgraph results. The default value is ios, which stands for intersection-over-sub-box (the area of ​​the intersection of two boxes divided by the area of ​​the smaller box). You can also select iou (the area of ​​the intersection of two boxes divided by the area of ​​their union). The accuracy varies depending on the dataset, but choosing ios will result in faster prediction speed.
+In [ ]
+# deploy infer,使用单张子图：
+!CUDA_VISIBLE_DEVICES=0 python deploy/python/infer.py --model_dir=output_inference/ppyoloe_crn_l_80e_sliced_visdrone_640_025 --image_file=/home/aistudio/work/demo/sliced/demo_images_640_025/0000315_01601_d_0000509_480_125_1120_765.jpg --output_dir=/home/aistudio/work/demo/deploy_output --device=GPU --threshold=0.30
+In [ ]
+# 可视化
+from PIL import Image
+im = Image.open('/home/aistudio/work/demo/deploy_output/0000315_01601_d_0000509_480_125_1120_765.jpg') 
+im
+3.6.3 Automatically slice the original image and reassemble the resulting image using the jigsaw puzzle
+In [ ]
+# deploy slice infer
+# 单张图
+!CUDA_VISIBLE_DEVICES=0 python deploy/python/infer.py --model_dir=output_inference/ppyoloe_crn_l_80e_sliced_visdrone_640_025 --image_file=/home/aistudio/work/demo/input_im/images/0000315_01601_d_0000509.jpg --output_dir=/home/aistudio/work/demo/deploy_output --device=GPU --threshold=0.25  --slice_infer --slice_size 640 640 --overlap_ratio 0.25 0.25 --combine_method=nms --match_threshold=0.6 --match_metric=ios
+In [ ]
+# 可视化
+from PIL import Image
+im = Image.open('/home/aistudio/work/demo/deploy_output/0000315_01601_d_0000509.jpg') 
+im
+Code Explanation

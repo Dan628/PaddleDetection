@@ -1,7 +1,6 @@
 _BASE_: [
   '../datasets/ndt_detection.yml',
   '../runtime.yml',
-  './_base_/optimizer_80e.yml',
   './_base_/ppyoloe_plus_crn.yml',
   './_base_/ppyoloe_plus_reader.yml',
 ]
@@ -9,6 +8,7 @@ _BASE_: [
 log_iter: 100
 snapshot_epoch: 5
 weights: output/ppyoloe_plus_l_ndt/model_final
+epoch: 80
 
 pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/ppyoloe_crn_l_obj365_pretrained.pdparams
 depth_mult: 1.0
@@ -17,7 +17,7 @@ width_mult: 1.0
 # 1. OPTIMIZER - Add AdamW (tested and working)
 OptimizerBuilder:
   optimizer:
-    type: AdamW
+    !AdamW
     weight_decay: 0.05
     beta1: 0.9
     beta2: 0.999
@@ -33,6 +33,7 @@ LearningRate:
       epochs: 5
 
 # 2. WANDB - Add logging
+use_wandb: true
 wandb:
   project: NDT-Defect-Detection
   name: ppyoloe_plus_l_adamw
@@ -41,6 +42,7 @@ wandb:
 TrainReader:
   sample_transforms:
     - Decode: {}
+    - Resize: {target_size: [640, 640], keep_ratio: False, interp: 2}  # Force 640x640 before Mosaic
     - Mosaic:
         prob: 1.0
         input_dim: [640, 640]

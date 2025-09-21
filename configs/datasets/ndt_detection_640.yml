@@ -1,0 +1,23 @@
+metric: COCO
+num_classes: 9
+
+TrainDataset:
+  name: COCODataSet
+  image_dir: images/train
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_640_fixed/instances_train.json
+  dataset_dir: /home/ubuntu/weld-training-fs/yolo_dataset_640_fixed
+  data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
+
+EvalDataset:
+  name: COCODataSet
+  image_dir: images/val
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_640_fixed/instances_val.json
+  dataset_dir: /home/ubuntu/weld-training-fs/yolo_dataset_640_fixed
+  allow_empty: true
+
+TestDataset:
+  name: COCODataSet
+  image_dir: images/val
+  anno_path: /home/ubuntu/weld-training-fs/coco_labels_640_fixed/instances_val.json
+  dataset_dir: /home/ubuntu/weld-training-fs/yolo_dataset_640_fixed
+  allow_empty: true
