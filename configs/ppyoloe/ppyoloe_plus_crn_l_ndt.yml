@@ -13,10 +13,10 @@ _BASE_: [
 ]
 
 # Training settings
-epoch: 80
+epoch: 200
 log_iter: 100
 snapshot_epoch: 5
-weights: output/ppyoloe_plus_crn_l_ndt/model_final
+weights: output/ppyoloe_plus_crn_l_80e_coco/model_final
 
 # Model architecture settings (L variant)
 # Reference: configs/ppyoloe/ppyoloe_plus_crn_l_80e_coco.yml
@@ -30,8 +30,9 @@ width_mult: 1.0
 # Original in _base_/optimizer_80e.yml uses Momentum with base_lr: 0.01
 OptimizerBuilder:
   optimizer:
-    !AdamW  # Using AdamW as per requirement
-    weight_decay: 0.05  # Standard weight decay for AdamW
+    type: AdamW
+    #!AdamW  # Using AdamW as per requirement
+    weight_decay: 0.01  # Standard weight decay for AdamW
     beta1: 0.9  # Default Adam beta1
     beta2: 0.999  # Default Adam beta2
   regularizer: null  # AdamW has built-in weight decay, no need for L2
@@ -43,7 +44,7 @@ LearningRate:
   base_lr: 0.001  # Conservative: 10x smaller than SGD default (0.01)
   schedulers:
     - !CosineDecay
-      max_epochs: 80
+      max_epochs: 200
     - !LinearWarmup
       start_factor: 0.
       epochs: 5  # 5 epoch warmup
@@ -54,7 +55,7 @@ use_wandb: true
 wandb:
   project: NDT-Defect-Detection
   name: ppyoloe_plus_l_ndt
-  save_dir: ./wandb_logs
+  dir: ./wandb_logs  # ← CORRECT
   tags: ["ppyoloe_plus", "l_variant", "adamw", "ndt"]
 
 # 4. AUGMENTATIONS WITH MOSAIC & MIXUP
@@ -64,25 +65,30 @@ TrainReader:
   sample_transforms:
     - Decode: {}
     - Mosaic:
-        prob: 1.0
+        prob: .9
         input_dim: [640, 640]
-        degrees: [-10, 10]
-        translate: [-0.1, 0.1]
-        scale: [0.5, 1.5]
+        degrees: [-15, 15]  # Match your YOLOv8: 15 degrees
+        translate: [-0.2, 0.2]  # Match your YOLOv8: 0.2
+        scale: [0.7, 1.3]  # More aggressive like YOLOv8 scale: 0.7 means ±0.7
         shear: [-2.0, 2.0]
-        enable_mixup: True
+        #enable_mixup: True
+        #mixup_prob: 0.05  # Match your YOLOv8: 15% probability
     - AugmentHSV:
         hgain: 0.015
         sgain: 0.7
         vgain: 0.4
     - RandomDistort: {}
-    - RandomExpand: {fill_value: [123.675, 116.28, 103.53]}
-    - RandomCrop: {}
+    #- RandomExpand: {fill_value: [123.675, 116.28, 103.53]}
+    #- RandomCrop:
+     #   scaling: [0.7, 1.0]  # Only crop 70-100% of image (was 30-100%)
+      #  aspect_ratio: [0.8, 1.2]  # Keep crops more square (was 0.5-2.0)
+       # allow_no_crop: True  # Often return uncropped
+        #num_attempts: 25  # Fewer attempts (was 50)
     - RandomFlip: {}
 
   batch_transforms:
     - BatchRandomResize:
-        target_size: [448, 480, 512, 544, 576, 608, 640]
+        target_size: [512, 544, 576, 608, 640, 672, 704]
         random_size: True
         random_interp: True
         keep_ratio: False
@@ -91,12 +97,12 @@ TrainReader:
     - PadGT: {}
 
   # Training settings
-  batch_size: 8  # Conservative for L model
+  batch_size: 32  # Conservative for L model
   shuffle: true
   drop_last: true
   use_shared_memory: true
   collate_batch: true
-  worker_num: 2  # Important field for data loading
+  worker_num: 8  # Important field for data loading
 
 # Evaluation settings remain default from base config
 # Test settings remain default from base config
